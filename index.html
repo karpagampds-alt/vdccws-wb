@@ -51,6 +51,8 @@ th,td{padding:6px 8px;border-bottom:1px solid var(--bd);text-align:right}th:firs
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.5.31/jspdf.plugin.autotable.min.js"></script>
 <script>
 const FU=[["petrol","Petrol","L"],["diesel","Diesel","L"],["cng","CNG","kg"],["xp","Extra Premium Petrol","L"],["green","Green Diesel","L"]];
+const EV=["petrol","xp"],cols=k=>EV.includes(k)?5:4,labs=k=>["OB","Supply","Sales"].concat(EV.includes(k)?["Evap. loss"]:[],["CB"]);
+const vals=(d,f)=>{const r=calc(d,f),x=d.fuels[f]||{};return [n(x.ob),n(x.supply),r.s].concat(EV.includes(f)?[r.ev]:[],[r.c])};
 const $=id=>document.getElementById(id);
 const n=v=>parseFloat(v)||0, f2=v=>v.toLocaleString("en-IN",{maximumFractionDigits:2}), rs=v=>"₹"+f2(v);
 let days={}, cur="", D=null, col=null, dirty=false, users={}, me=null, ucol=null;
@@ -64,18 +66,18 @@ function blank(date){
   const pl=Object.values(days).filter(x=>x.bk===BK&&x.date<date).sort((a,b)=>a.date<b.date?-1:1), p=pl.length?pl[pl.length-1]:null;
   const d={date,bk:BK,bunk:BN,sm:"",fuels:{},pumps:[]};
   FU.forEach(([k])=>{const pf=p&&p.fuels&&p.fuels[k];
-    d.fuels[k]={ob:pf?String(+(n(pf.ob)+n(pf.supply)-fuelSales(p,k)).toFixed(2)):"",supply:"",rate:pf?pf.rate:""};});
+    d.fuels[k]={ob:pf?String(+(n(pf.ob)+n(pf.supply)-fuelSales(p,k)-(EV.includes(k)?n(pf.evap):0)).toFixed(2)):"",supply:"",rate:pf?pf.rate:""};});
   if(p&&p.pumps)p.pumps.forEach(x=>d.pumps.push({fuel:x.fuel,name:x.name,open:x.close,close:""}));
   else[["petrol",2],["diesel",2],["cng",1],["xp",1],["green",1]].forEach(([k,c])=>{for(let i=1;i<=c;i++)d.pumps.push({fuel:k,name:"Pump "+i,open:"",close:""})});
   return d;}
 const fuelSales=(d,k)=>(d.pumps||[]).filter(p=>p.fuel===k&&p.close!=="").reduce((s,p)=>s+Math.max(0,n(p.close)-n(p.open)),0);
-function calc(d,k){const x=d.fuels[k]||{},s=fuelSales(d,k),c=n(x.ob)+n(x.supply)-s;return{s,c,sv:s*n(x.rate),cv:c*n(x.rate)}}
+function calc(d,k){const x=d.fuels[k]||{},s=fuelSales(d,k),ev=EV.includes(k)?n(x.evap):0,c=n(x.ob)+n(x.supply)-s-ev;return{s,ev,c,sv:s*n(x.rate),cv:c*n(x.rate)}}
 function build(){
   $("sm").value=D.sm||"";let h="";
   FU.forEach(([k,nm,u])=>{h+=`<div class="card"><h2>${nm} <span class="mu">(${u})</span></h2>
   <div class="g3"><div><label>OB (opening stock)</label><input type="number" inputmode="decimal" data-f="${k}" data-k="ob" value="${D.fuels[k].ob}"></div>
   <div><label>Supply received</label><input type="number" inputmode="decimal" data-f="${k}" data-k="supply" value="${D.fuels[k].supply}"></div>
-  <div><label>Rate / ${u} (₹)</label><input type="number" inputmode="decimal" data-f="${k}" data-k="rate" value="${D.fuels[k].rate}"></div></div>
+  <div><label>Rate / ${u} (₹)</label><input type="number" inputmode="decimal" data-f="${k}" data-k="rate" value="${D.fuels[k].rate}"></div>${EV.includes(k)?`<div><label>Evaporation loss (${u})</label><input type="number" inputmode="decimal" data-f="${k}" data-k="evap" value="${D.fuels[k].evap||""}"></div>`:""}</div>
   <div class="mu" style="margin-bottom:4px">Pump meter readings</div>`;
   D.pumps.forEach((p,i)=>{if(p.fuel!==k)return;
     h+=`<div class="pr"><div><label>Pump</label><input data-p="${i}" data-k="name" value="${p.name}"></div>
@@ -91,7 +93,7 @@ function applyLock(){const x=days[did(cur)],saved=!!x,lock=saved&&!x.unlocked&&!
 function refresh(){let ts=0,tv=0,tc=0;
   D.pumps.forEach((p,i)=>{const e=$("ps"+i);if(e)e.textContent=p.close===""?"–":f2(Math.max(0,n(p.close)-n(p.open)))});
   FU.forEach(([k,nm,u])=>{const r=calc(D,k);ts+=r.sv;tc+=r.cv;
-    $("o_"+k).innerHTML=`<div>Sales <b>${f2(r.s)} ${u}</b></div><div>Sales value <b>${rs(r.sv)}</b></div><div>Closing balance <b>${f2(r.c)} ${u}</b></div><div>Stock value <b>${rs(r.cv)}</b></div>`;});
+    $("o_"+k).innerHTML=`<div>Sales <b>${f2(r.s)} ${u}</b></div>${EV.includes(k)?`<div>Evaporation loss <b>${f2(r.ev)} ${u}</b></div>`:""}<div>Sales value <b>${rs(r.sv)}</b></div><div>Closing balance <b>${f2(r.c)} ${u}</b></div><div>Stock value <b>${rs(r.cv)}</b></div>`;});
   $("tot").innerHTML=`<div>Total sales value <b>${rs(ts)}</b></div><div>Total stock value <b>${rs(tc)}</b></div>`;}
 function load(date){cur=date;dirty=false;$("dt").value=date;D=JSON.parse(JSON.stringify(days[did(date)]||blank(date)));FU.forEach(([k])=>{if(!D.fuels[k])D.fuels[k]={ob:"",supply:"",rate:""};if(!D.pumps.some(p=>p.fuel===k))D.pumps.push({fuel:k,name:"Pump 1",open:"",close:""})});build();$("st").textContent=days[did(date)]?"Saved report loaded.":"New day: opening values filled from previous day.";}
 $("f").addEventListener("input",e=>{const t=e.target;dirty=true;
@@ -106,43 +108,48 @@ $("sv").onclick=async()=>{const ex=days[did(cur)];if(ex&&!ex.unlocked&&!isAdm())
   try{if(col)await col.doc(did(cur)).set(D);else{days[did(cur)]=D;localStorage.setItem("pb",JSON.stringify(days));}
     days[did(cur)]=JSON.parse(JSON.stringify(D));dirty=false;load(cur);$("st").textContent="✓ Saved: "+BN+" – "+cur+(isAdm()?"":" (locked – admin permission needed to edit)");}catch(e){$("st").textContent="Could not save. Please try again.";}};
 function office(){const dd=$("od").value||today();
-  let h=`<tr><th rowspan="2">Bunk</th>`+FU.map(f=>`<th colspan="4">${f[1].replace(" Petrol","")} (${f[2]})</th>`).join("")+`<th rowspan="2">Sales ₹</th><th rowspan="2">CB ₹</th><th rowspan="2">By</th></tr><tr>`+FU.map(()=>"<th>OB</th><th>Supply</th><th>Sales</th><th>CB</th>").join("")+"</tr>";
-  const T=FU.map(()=>[0,0,0,0]);let TS=0,TC=0;
+  let h=`<tr><th rowspan="2">Bunk</th>`+FU.map(f=>`<th colspan="${cols(f[0])}">${f[1].replace(" Petrol","")} (${f[2]})</th>`).join("")+`<th rowspan="2">Sales ₹</th><th rowspan="2">CB ₹</th><th rowspan="2">By</th></tr><tr>`+FU.map(f=>labs(f[0]).map(l=>`<th>${l}</th>`).join("")).join("")+"</tr>";
+  const T=FU.map(f=>labs(f[0]).map(()=>0));let TS=0,TC=0;const NC=FU.reduce((a,f)=>a+cols(f[0]),0)+3;
   LIST.forEach(([b,nm])=>{const d=days[b+"__"+dd];
-    if(!d){h+=`<tr class="c" data-b="${b}"><td>${nm}</td><td colspan="23" class="mu" style="text-align:center">Not submitted</td></tr>`;return}
-    let sv=0,cv=0;const c=FU.map(([f],i)=>{const r=calc(d,f),x=d.fuels[f]||{},a=[n(x.ob),n(x.supply),r.s,r.c];sv+=r.sv;cv+=r.cv;a.forEach((v,j)=>T[i][j]+=v);return a.map(v=>`<td>${f2(v)}</td>`).join("")}).join("");TS+=sv;TC+=cv;
+    if(!d){h+=`<tr class="c" data-b="${b}"><td>${nm}</td><td colspan="${NC}" class="mu" style="text-align:center">Not submitted</td></tr>`;return}
+    let sv=0,cv=0;const c=FU.map(([f],i)=>{const r=calc(d,f),a=vals(d,f);sv+=r.sv;cv+=r.cv;a.forEach((v,j)=>T[i][j]+=v);return a.map(v=>`<td>${f2(v)}</td>`).join("")}).join("");TS+=sv;TC+=cv;
     h+=`<tr class="c" data-b="${b}"><td>${nm}</td>${c}<td>${f2(sv)}</td><td>${f2(cv)}</td><td>✓ ${d.sm||""}</td></tr>`;});
   h+=`<tr><th>TOTAL</th>`+T.map(a=>a.map(v=>`<th>${f2(v)}</th>`).join("")).join("")+`<th>${f2(TS)}</th><th>${f2(TC)}</th><th></th></tr>`;
   $("hist").innerHTML=h;}
 $("od").onchange=office;
 function offData(){const dd=$("od").value||today();
-  const top=["Bunk"],sub=[""];FU.forEach(([,nm,u])=>{top.push(nm+" ("+u+")","","","");sub.push("OB","Supply","Sales","CB")});top.push("Sales ₹","CB ₹","By");sub.push("","","");
-  const T=FU.map(()=>[0,0,0,0]);let TS=0,TC=0;const rows=[];
+  const top=["Bunk"],sub=[""],spans=FU.map(f=>cols(f[0]));FU.forEach(([k,nm,u],i)=>{top.push(nm+" ("+u+")");for(let j=1;j<spans[i];j++)top.push("");sub.push(...labs(k))});top.push("Sales ₹","CB ₹","By");sub.push("","","");
+  const T=FU.map(f=>labs(f[0]).map(()=>0));let TS=0,TC=0;const rows=[];
   LIST.forEach(([b,nm])=>{const d=days[b+"__"+dd];if(!d){rows.push([nm,"Not submitted"]);return}
-    const r=[nm];let sv=0,cv=0;FU.forEach(([f],i)=>{const q=calc(d,f),x=d.fuels[f]||{},a=[n(x.ob),n(x.supply),q.s,q.c];sv+=q.sv;cv+=q.cv;a.forEach((v,j)=>T[i][j]+=v);r.push(...a.map(v=>+v.toFixed(2)))});
+    const r=[nm];let sv=0,cv=0;FU.forEach(([f],i)=>{const q=calc(d,f),a=vals(d,f);sv+=q.sv;cv+=q.cv;a.forEach((v,j)=>T[i][j]+=v);r.push(...a.map(v=>+v.toFixed(2)))});
     TS+=sv;TC+=cv;r.push(+sv.toFixed(2),+cv.toFixed(2),d.sm||"");rows.push(r)});
   const t=["TOTAL"];T.forEach(a=>t.push(...a.map(v=>+v.toFixed(2))));t.push(+TS.toFixed(2),+TC.toFixed(2),"");rows.push(t);
-  return{dd,top,sub,rows}}
-async function dl(kind){const m=$("dst");const dw={save:async({filename,data})=>{const a=document.createElement("a");a.href=URL.createObjectURL(new Blob([data]));a.download=filename;document.body.appendChild(a);a.click();a.remove()}};
+  return{dd,top,sub,rows,spans}}
+async function dl(kind){const m=$("dst");const dw={save:async({filename,data})=>{
+    const mime=filename.endsWith(".pdf")?"application/pdf":"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
+    const u8=data instanceof ArrayBuffer?new Uint8Array(data):new Uint8Array(await new Blob([data]).arrayBuffer());
+    if(!window.AndroidBridge&&/; wv\)/.test(navigator.userAgent))throw new Error("oldapp");
+    if(window.AndroidBridge){let bin="";for(let i=0;i<u8.length;i+=8192)bin+=String.fromCharCode.apply(null,u8.subarray(i,i+8192));window.AndroidBridge.saveFile(filename,btoa(bin));return}
+    const a=document.createElement("a");a.href=URL.createObjectURL(new Blob([u8],{type:mime}));a.download=filename;document.body.appendChild(a);a.click();setTimeout(()=>{URL.revokeObjectURL(a.href);a.remove()},1000)}};
   if(!dw){m.textContent="Download is not available here.";return}
-  const{dd,top,sub,rows}=offData();let data;
+  const{dd,top,sub,rows,spans}=offData();let data;
   try{
     if(kind==="x"){if(!window.XLSX)throw 0;
       const aoa=[["VDCCWS Petrol Bunk – Office Summary"],["Date",dd],[],top,sub,...rows.map(r=>r.length===2?[r[0],r[1]]:r)];
-      const ws=XLSX.utils.aoa_to_sheet(aoa);ws["!merges"]=FU.map((_,i)=>({s:{r:3,c:1+i*4},e:{r:3,c:4+i*4}}));
+      const ws=XLSX.utils.aoa_to_sheet(aoa);let cc=1;ws["!merges"]=FU.map((f,i)=>{const st=cc;cc+=spans[i];return{s:{r:3,c:st},e:{r:3,c:cc-1}}});
       ws["!cols"]=[{wch:28}].concat(top.slice(1).map(()=>({wch:11})));
       const wb=XLSX.utils.book_new();XLSX.utils.book_append_sheet(wb,ws,"Office Summary");
       data=XLSX.write(wb,{type:"array",bookType:"xlsx"});
     }else{if(!window.jspdf)throw 0;
       const doc=new jspdf.jsPDF({orientation:"landscape",format:"a3"});
       doc.setFontSize(14);doc.text("VDCCWS Petrol Bunk - Office Summary  |  Date: "+dd,14,14);
-      const h1=top.map((t,i)=>i>=1&&i<=20?(i%4===1?{content:t,colSpan:4,styles:{halign:"center"}}:null):t.replace("₹","Rs")).filter(x=>x!==null);
+      const h1=["Bunk"].concat(FU.map((f,i)=>({content:f[1]+" ("+f[2]+")",colSpan:spans[i],styles:{halign:"center"}})),["Sales Rs","CB Rs","By"]);
       const h2=sub.map(s=>s);
-      const body=rows.map(r=>r.length===2?[r[0],{content:r[1],colSpan:23,styles:{halign:"center",textColor:120}}]:r.map((v,i)=>typeof v==="number"?f2(v):v));
+      const body=rows.map(r=>r.length===2?[r[0],{content:r[1],colSpan:sub.length-1,styles:{halign:"center",textColor:120}}]:r.map((v,i)=>typeof v==="number"?f2(v):v));
       doc.autoTable({head:[h1,h2],body,startY:20,theme:"grid",styles:{fontSize:7,halign:"right",cellPadding:1.5},headStyles:{halign:"center",fillColor:[11,110,79]},columnStyles:{0:{halign:"left",fontStyle:"bold",cellWidth:38}},didParseCell:x=>{if(x.row.index===rows.length-1&&x.section==="body")x.cell.styles.fontStyle="bold"}});
       data=doc.output("arraybuffer");}
     await dw.save({filename:"Office-Summary-"+dd+(kind==="x"?".xlsx":".pdf"),data});m.textContent="✓ Download ready";
-  }catch(e){m.textContent=e&&e.code==="declined"?"Download cancelled.":"Could not create the file. Please try again."}}
+  }catch(e){m.textContent=e&&e.message==="oldapp"?"Old app version. Please install the latest APK to download files.":(e&&e.code==="declined"?"Download cancelled.":"Could not create the file. Please try again.")}}
 $("dx").onclick=()=>dl("x");$("dp").onclick=()=>dl("p");
 $("hist").onclick=e=>{const r=e.target.closest("tr[data-b]");if(r){BK=r.dataset.b;BN=bunks[BK];fillB();tab(1);load($("od").value||today())}};
 function tab(i){if(i===2&&!isAdm())i=1;$("v1").hidden=i!==1;$("v2").hidden=i!==2;$("v3").hidden=i!==3;[1,2,3].forEach(k=>$("t"+k).classList.toggle("on",i===k));if(i===2)office();if(i===3)acct();}
