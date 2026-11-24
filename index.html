@@ -51,8 +51,8 @@ th,td{padding:6px 8px;border-bottom:1px solid var(--bd);text-align:right}th:firs
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.5.31/jspdf.plugin.autotable.min.js"></script>
 <script>
 const FU=[["petrol","Petrol","L"],["diesel","Diesel","L"],["cng","CNG","kg"],["xp","Extra Premium Petrol","L"],["green","Green Diesel","L"]];
-const EV=["petrol","xp"],cols=k=>EV.includes(k)?5:4,labs=k=>["OB","Supply","Sales"].concat(EV.includes(k)?["Evap. loss"]:[],["CB"]);
-const vals=(d,f)=>{const r=calc(d,f),x=d.fuels[f]||{};return [n(x.ob),n(x.supply),r.s].concat(EV.includes(f)?[r.ev]:[],[r.c])};
+const EV=["petrol","xp"],cols=k=>EV.includes(k)?6:5,labs=k=>["OB","Supply","Sales","Testing"].concat(EV.includes(k)?["Evap. loss"]:[],["CB"]);
+const vals=(d,f)=>{const r=calc(d,f),x=d.fuels[f]||{};return [n(x.ob),n(x.supply),r.s,r.t].concat(EV.includes(f)?[r.ev]:[],[r.c])};
 const $=id=>document.getElementById(id);
 const n=v=>parseFloat(v)||0, f2=v=>v.toLocaleString("en-IN",{maximumFractionDigits:2}), rs=v=>"₹"+f2(v);
 let days={}, cur="", D=null, col=null, dirty=false, users={}, me=null, ucol=null;
@@ -71,13 +71,13 @@ function blank(date){
   else[["petrol",2],["diesel",2],["cng",1],["xp",1],["green",1]].forEach(([k,c])=>{for(let i=1;i<=c;i++)d.pumps.push({fuel:k,name:"Pump "+i,open:"",close:""})});
   return d;}
 const fuelSales=(d,k)=>(d.pumps||[]).filter(p=>p.fuel===k&&p.close!=="").reduce((s,p)=>s+Math.max(0,n(p.close)-n(p.open)),0);
-function calc(d,k){const x=d.fuels[k]||{},s=fuelSales(d,k),ev=EV.includes(k)?n(x.evap):0,c=n(x.ob)+n(x.supply)-s-ev;return{s,ev,c,sv:s*n(x.rate),cv:c*n(x.rate)}}
+function calc(d,k){const x=d.fuels[k]||{},g=fuelSales(d,k),t=n(x.testing),s=g-t,ev=EV.includes(k)?n(x.evap):0,c=n(x.ob)+n(x.supply)-s-t-ev;return{g,t,s,ev,c,sv:s*n(x.rate),cv:c*n(x.rate)}}
 function build(){
   $("sm").value=D.sm||"";let h="";
   FU.forEach(([k,nm,u])=>{h+=`<div class="card"><h2>${nm} <span class="mu">(${u})</span></h2>
   <div class="g3"><div><label>OB (opening stock)</label><input type="number" inputmode="decimal" data-f="${k}" data-k="ob" value="${D.fuels[k].ob}"></div>
   <div><label>Supply received</label><input type="number" inputmode="decimal" data-f="${k}" data-k="supply" value="${D.fuels[k].supply}"></div>
-  <div><label>Rate / ${u} (₹)</label><input type="number" inputmode="decimal" data-f="${k}" data-k="rate" value="${D.fuels[k].rate}"></div>${EV.includes(k)?`<div><label>Evaporation loss (${u})</label><input type="number" inputmode="decimal" data-f="${k}" data-k="evap" value="${D.fuels[k].evap||""}"></div>`:""}</div>
+  <div><label>Rate / ${u} (₹)</label><input type="number" inputmode="decimal" data-f="${k}" data-k="rate" value="${D.fuels[k].rate}"></div><div><label>All pump testing (${u})</label><input type="number" inputmode="decimal" data-f="${k}" data-k="testing" value="${D.fuels[k].testing||""}"></div>${EV.includes(k)?`<div><label>Evaporation loss (${u})</label><input type="number" inputmode="decimal" data-f="${k}" data-k="evap" value="${D.fuels[k].evap||""}"></div>`:""}</div>
   <div class="mu" style="margin-bottom:4px">Pump meter readings</div>`;
   D.pumps.forEach((p,i)=>{if(p.fuel!==k)return;
     h+=`<div class="pr"><div><label>Pump</label><input data-p="${i}" data-k="name" value="${p.name}"></div>
@@ -93,7 +93,7 @@ function applyLock(){const x=days[did(cur)],saved=!!x,lock=saved&&!x.unlocked&&!
 function refresh(){let ts=0,tv=0,tc=0;
   D.pumps.forEach((p,i)=>{const e=$("ps"+i);if(e)e.textContent=p.close===""?"–":f2(Math.max(0,n(p.close)-n(p.open)))});
   FU.forEach(([k,nm,u])=>{const r=calc(D,k);ts+=r.sv;tc+=r.cv;
-    $("o_"+k).innerHTML=`<div>Sales <b>${f2(r.s)} ${u}</b></div>${EV.includes(k)?`<div>Evaporation loss <b>${f2(r.ev)} ${u}</b></div>`:""}<div>Sales value <b>${rs(r.sv)}</b></div><div>Closing balance <b>${f2(r.c)} ${u}</b></div><div>Stock value <b>${rs(r.cv)}</b></div>`;});
+    $("o_"+k).innerHTML=`<div>Meter total <b>${f2(r.g)} ${u}</b></div><div>Pump testing <b>${f2(r.t)} ${u}</b></div><div>Sales (without testing) <b>${f2(r.s)} ${u}</b></div>${EV.includes(k)?`<div>Evaporation loss <b>${f2(r.ev)} ${u}</b></div>`:""}<div>Sales value <b>${rs(r.sv)}</b></div><div>Closing balance <b>${f2(r.c)} ${u}</b></div><div>Stock value <b>${rs(r.cv)}</b></div>`;});
   $("tot").innerHTML=`<div>Total sales value <b>${rs(ts)}</b></div><div>Total stock value <b>${rs(tc)}</b></div>`;}
 function load(date){cur=date;dirty=false;$("dt").value=date;D=JSON.parse(JSON.stringify(days[did(date)]||blank(date)));FU.forEach(([k])=>{if(!D.fuels[k])D.fuels[k]={ob:"",supply:"",rate:""};if(!D.pumps.some(p=>p.fuel===k))D.pumps.push({fuel:k,name:"Pump 1",open:"",close:""})});build();$("st").textContent=days[did(date)]?"Saved report loaded.":"New day: opening values filled from previous day.";}
 $("f").addEventListener("input",e=>{const t=e.target;dirty=true;
@@ -158,7 +158,7 @@ function enter(u){me=u;try{sessionStorage.setItem("pbu",u)}catch(e){}const x=use
   $("lg").hidden=true;$("app").hidden=false;$("t2").hidden=!a;$("adm").hidden=!a;$("who").textContent="Logged in: "+x.name+(a?" (Admin)":"");
   if(!a){BK=x.bunk;BN=bunks[BK]}fillB();$("bk").disabled=!a;tab(1);load(cur);}
 $("li").onclick=async()=>{const u=$("lu").value.trim().toLowerCase();$("lm").textContent="Please wait...";
-  try{await auth.signInWithEmailAndPassword(u+"@"+DOMAIN,$("lp").value);$("lp").value="";$("lm").textContent=""}catch(e){$("lm").textContent="Wrong user ID or password."}};
+  try{await auth.signInWithEmailAndPassword(u+"@"+DOMAIN,$("lp").value);$("lp").value="";$("lm").textContent=""}catch(e){const c=(e&&e.code)||"";$("lm").textContent=(c==="auth/invalid-credential"||c==="auth/wrong-password"||c==="auth/user-not-found"||c==="auth/invalid-email")?"Wrong user ID or password. ("+c+")":"Login error: "+(c||e)}};
 $("lp").onkeydown=e=>{if(e.key==="Enter")$("li").click()};
 $("ulk").onclick=async()=>{const id=did(cur),x=days[id];if(!x||!isAdm()||!col)return;
   try{await col.doc(id).update({unlocked:!x.unlocked});x.unlocked=!x.unlocked;load(cur);$("st").textContent=x.unlocked?"Unlocked: bunk can edit this report once.":"Locked again."}catch(e){$("st").textContent="Could not change the lock. Try again."}};
@@ -182,4 +182,15 @@ try{firebase.initializeApp(FIREBASE_CONFIG);auth=firebase.auth();db=firebase.fir
     try{const nm=bunks[id];if(id!=="admin"&&!nm)throw 0;users[id]=id==="admin"?{name:"Admin",role:"admin"}:{name:nm,role:"bunk",bunk:id};me=id;enter(id);subscribe()}
     catch(e){$("lm").textContent="Account is not set up. Please contact admin.";auth.signOut()}});
 }catch(e){$("lm").textContent="App is not configured. Check firebase-config.js."}
+
+const APP_VER="20261124a";
+(function(){
+  async function chk(){try{const r=await fetch(location.pathname,{cache:"no-store"});if(!r.ok)return;const t=await r.text();
+    const m=t.match(/APP_VER="([^"]+)"/);if(!m||m[1]===APP_VER)return;
+    let seen="";try{seen=sessionStorage.getItem("rlv")||""}catch(e){}
+    if(seen===m[1])return;
+    if(typeof dirty!=="undefined"&&dirty){if(!document.getElementById("nv")){const b=document.createElement("div");b.id="nv";b.textContent="New version available. Save your work, then tap here to refresh.";b.style.cssText="position:fixed;left:8px;right:8px;bottom:8px;background:#0b6e4f;color:#fff;padding:10px;border-radius:10px;text-align:center;z-index:99";b.onclick=()=>{try{sessionStorage.setItem("rlv",m[1])}catch(e){}location.reload()};document.body.appendChild(b)}}
+    else{try{sessionStorage.setItem("rlv",m[1])}catch(e){}location.reload()}}catch(e){}}
+  chk();setInterval(chk,300000);document.addEventListener("visibilitychange",()=>{if(!document.hidden)chk()});
+})();
 </script></body></html>
