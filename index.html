@@ -14,7 +14,7 @@ h1{font-size:19px;margin:4px 0 10px}h2{font-size:15px;margin:0}
 input,select{width:100%;padding:8px;border:1px solid var(--bd);border-radius:8px;background:var(--bg);color:var(--tx);font:inherit}
 label{font-size:12px;color:var(--mu);display:block}
 .g3{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin:8px 0}
-.pr{display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:6px;align-items:end;margin-bottom:6px}
+.pr{display:grid;grid-template-columns:1.1fr 1fr 1fr 1fr .9fr;gap:4px;align-items:end;margin-bottom:6px}.pr input{padding:6px 4px;font-size:13px}.pr label{font-size:11px}
 .out{background:var(--hl);border-radius:8px;padding:8px;font-size:13px;display:grid;grid-template-columns:repeat(2,1fr);gap:4px 10px;margin-top:8px}
 .out b{float:right}
 button{background:var(--ac);color:var(--acx);border:0;border-radius:8px;padding:9px 14px;font:inherit;font-weight:600}
@@ -67,21 +67,23 @@ function blank(date){
   const d={date,bk:BK,bunk:BN,sm:"",fuels:{},pumps:[]};
   FU.forEach(([k])=>{const pf=p&&p.fuels&&p.fuels[k];
     d.fuels[k]={ob:pf?String(+(n(pf.ob)+n(pf.supply)-fuelSales(p,k)-(EV.includes(k)?n(pf.evap):0)).toFixed(2)):"",supply:"",rate:pf?pf.rate:""};});
-  if(p&&p.pumps)p.pumps.forEach(x=>d.pumps.push({fuel:x.fuel,name:x.name,open:x.close,close:""}));
+  if(p&&p.pumps)p.pumps.forEach(x=>d.pumps.push({fuel:x.fuel,name:x.name,open:x.close,test:"",close:""}));
   else[["petrol",2],["diesel",2],["cng",1],["xp",1],["green",1]].forEach(([k,c])=>{for(let i=1;i<=c;i++)d.pumps.push({fuel:k,name:"Pump "+i,open:"",close:""})});
   return d;}
+const fuelTest=(d,k)=>(d.pumps||[]).filter(p=>p.fuel===k&&p.close!=="").reduce((s,p)=>s+n(p.test),0);
 const fuelSales=(d,k)=>(d.pumps||[]).filter(p=>p.fuel===k&&p.close!=="").reduce((s,p)=>s+Math.max(0,n(p.close)-n(p.open)),0);
-function calc(d,k){const x=d.fuels[k]||{},g=fuelSales(d,k),t=n(x.testing),s=g-t,ev=EV.includes(k)?n(x.evap):0,c=n(x.ob)+n(x.supply)-s-t-ev;return{g,t,s,ev,c,sv:s*n(x.rate),cv:c*n(x.rate)}}
+function calc(d,k){const x=d.fuels[k]||{},g=fuelSales(d,k),pt=fuelTest(d,k),t=pt>0?pt:n(x.testing),s=g-t,ev=EV.includes(k)?n(x.evap):0,c=n(x.ob)+n(x.supply)-s-t-ev;return{g,t,s,ev,c,sv:s*n(x.rate),cv:c*n(x.rate)}}
 function build(){
   $("sm").value=D.sm||"";let h="";
   FU.forEach(([k,nm,u])=>{h+=`<div class="card"><h2>${nm} <span class="mu">(${u})</span></h2>
   <div class="g3"><div><label>OB (opening stock)</label><input type="number" inputmode="decimal" data-f="${k}" data-k="ob" value="${D.fuels[k].ob}"></div>
   <div><label>Supply received</label><input type="number" inputmode="decimal" data-f="${k}" data-k="supply" value="${D.fuels[k].supply}"></div>
-  <div><label>Rate / ${u} (₹)</label><input type="number" inputmode="decimal" data-f="${k}" data-k="rate" value="${D.fuels[k].rate}"></div><div><label>All pump testing (${u})</label><input type="number" inputmode="decimal" data-f="${k}" data-k="testing" value="${D.fuels[k].testing||""}"></div>${EV.includes(k)?`<div><label>Evaporation loss (${u})</label><input type="number" inputmode="decimal" data-f="${k}" data-k="evap" value="${D.fuels[k].evap||""}"></div>`:""}</div>
+  <div><label>Rate / ${u} (₹)</label><input type="number" inputmode="decimal" data-f="${k}" data-k="rate" value="${D.fuels[k].rate}"></div>${EV.includes(k)?`<div><label>Evaporation loss (${u})</label><input type="number" inputmode="decimal" data-f="${k}" data-k="evap" value="${D.fuels[k].evap||""}"></div>`:""}</div>
   <div class="mu" style="margin-bottom:4px">Pump meter readings</div>`;
   D.pumps.forEach((p,i)=>{if(p.fuel!==k)return;
     h+=`<div class="pr"><div><label>Pump</label><input data-p="${i}" data-k="name" value="${p.name}"></div>
     <div><label>Opening</label><input type="number" inputmode="decimal" data-p="${i}" data-k="open" value="${p.open}"></div>
+    <div><label>Testing</label><input type="number" inputmode="decimal" data-p="${i}" data-k="test" value="${p.test||""}"></div>
     <div><label>Closing</label><input type="number" inputmode="decimal" data-p="${i}" data-k="close" value="${p.close}"></div>
     <div><label>Sales</label><div id="ps${i}" style="padding:8px 0">0</div></div></div>`;});
   h+=`<button class="s" data-add="${k}">+ Add pump</button><div class="out" id="o_${k}"></div></div>`;});
@@ -91,7 +93,7 @@ function applyLock(){const x=days[did(cur)],saved=!!x,lock=saved&&!x.unlocked&&!
   $("sv").hidden=lock;const b=$("ulk");b.hidden=!(isAdm()&&saved);b.textContent=x&&x.unlocked?"🔒 Lock this report again":"🔓 Allow bunk to edit this report";
   $("lkm").textContent=lock?"🔒 Report saved and locked. Only admin can allow editing.":(saved&&x.unlocked&&!isAdm()?"🔓 Admin has allowed editing. After you save, it locks again.":"");}
 function refresh(){let ts=0,tv=0,tc=0;
-  D.pumps.forEach((p,i)=>{const e=$("ps"+i);if(e)e.textContent=p.close===""?"–":f2(Math.max(0,n(p.close)-n(p.open)))});
+  D.pumps.forEach((p,i)=>{const e=$("ps"+i);if(e)e.textContent=p.close===""?"–":f2(n(p.close)-n(p.open)-n(p.test))});
   FU.forEach(([k,nm,u])=>{const r=calc(D,k);ts+=r.sv;tc+=r.cv;
     $("o_"+k).innerHTML=`<div>Meter total <b>${f2(r.g)} ${u}</b></div><div>Pump testing <b>${f2(r.t)} ${u}</b></div><div>Sales (without testing) <b>${f2(r.s)} ${u}</b></div>${EV.includes(k)?`<div>Evaporation loss <b>${f2(r.ev)} ${u}</b></div>`:""}<div>Sales value <b>${rs(r.sv)}</b></div><div>Closing balance <b>${f2(r.c)} ${u}</b></div><div>Stock value <b>${rs(r.cv)}</b></div>`;});
   $("tot").innerHTML=`<div>Total sales value <b>${rs(ts)}</b></div><div>Total stock value <b>${rs(tc)}</b></div>`;}
@@ -183,7 +185,7 @@ try{firebase.initializeApp(FIREBASE_CONFIG);auth=firebase.auth();db=firebase.fir
     catch(e){$("lm").textContent="Account is not set up. Please contact admin.";auth.signOut()}});
 }catch(e){$("lm").textContent="App is not configured. Check firebase-config.js."}
 
-const APP_VER="20261124a";
+const APP_VER="20261124b";
 (function(){
   async function chk(){try{const r=await fetch(location.pathname,{cache:"no-store"});if(!r.ok)return;const t=await r.text();
     const m=t.match(/APP_VER="([^"]+)"/);if(!m||m[1]===APP_VER)return;
